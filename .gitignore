@@ -1,0 +1,13 @@
+.venv/
+
+.vscode/
+.idea/
+
+.env
+
+*.log
+
+*.build
+*.tmp
+*.out
+*.exe
