@@ -1,0 +1,71 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
+)
+
+/* structs copied across backend and frontend for now - fix later */
+
+type Message struct {
+	Type    string          `json:"type"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+type SystemInfo struct {
+	// host
+	Hostname string `json:"hostname"`
+	Arch     string `json:"arch"`
+	KVersion string `json:"kernel"`
+	Uptime   uint64 `json:"uptime"`
+
+	// hardware
+	CPU      int    `json:"cpu"`
+	CPUL     int    `json:"cpu_logical"`
+	MemTotal uint64 `json:"totalmem"`
+	MemFree  uint64 `json:"freemem"`
+
+	Disks []DiskInfo `json:"disks"`
+}
+
+type DiskInfo struct {
+	Mountpoint string  `json:"mountpoint"`
+	Total      uint64  `json:"total"`
+	Used       uint64  `json:"used"`
+	Free       uint64  `json:"free"`
+	UsedPct    float64 `json:"used_pct"`
+}
+
+func main() {
+	ctx := context.Background()
+	conn, _, err := websocket.Dial(ctx, "ws://localhost:8080/ws", nil)
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	for {
+		var msg Message
+		err := wsjson.Read(ctx, conn, &msg)
+		if err != nil {
+			fmt.Println("read error:", err)
+			return
+		}
+
+		var info SystemInfo
+		if err := json.Unmarshal(msg.Payload, &info); err != nil {
+			fmt.Println("decode error:", err)
+			return
+		}
+
+		fmt.Printf("host: %s | kernel: %s\n", info.Hostname, info.KVersion)
+		fmt.Printf("mem: %.1f GB / %.1f GB\n",
+			float64(info.MemFree)/1e9,
+			float64(info.MemTotal)/1e9,
+		)
+	}
+}
