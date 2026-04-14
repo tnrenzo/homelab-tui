@@ -10,7 +10,6 @@ import (
 )
 
 /* structs copied across backend and frontend for now - fix later */
-
 type Message struct {
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload"`
@@ -40,7 +39,8 @@ type DiskInfo struct {
 	UsedPct    float64 `json:"used_pct"`
 }
 
-func main() {
+// connect to ws and receive data
+func handleWS() {
 	ctx := context.Background()
 	conn, _, err := websocket.Dial(ctx, "ws://localhost:8080/ws", nil)
 	if err != nil {
@@ -62,10 +62,6 @@ func main() {
 			return
 		}
 
-		fmt.Printf("host: %s | kernel: %s\n", info.Hostname, info.KVersion)
-		fmt.Printf("mem: %.1f GB / %.1f GB\n",
-			float64(info.MemFree)/1e9,
-			float64(info.MemTotal)/1e9,
-		)
+		fmt.Println(info)
 	}
 }

@@ -16,6 +16,7 @@ type Payload struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
+// creates the websocket and sends system data
 func handleWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
