@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -39,6 +40,22 @@ type DiskInfo struct {
 	UsedPct    float64 `json:"used_pct"`
 }
 
+// latestSystemInfo is updated as websocket messages arrive.
+var latestSystemInfo SystemInfo
+var latestSystemInfoMu sync.RWMutex
+
+func setLatestSystemInfo(info SystemInfo) {
+	latestSystemInfoMu.Lock()
+	latestSystemInfo = info
+	latestSystemInfoMu.Unlock()
+}
+
+func getLatestSystemInfo() SystemInfo {
+	latestSystemInfoMu.RLock()
+	defer latestSystemInfoMu.RUnlock()
+	return latestSystemInfo
+}
+
 // connect to ws and receive data
 func handleWS() {
 	ctx := context.Background()
@@ -62,6 +79,6 @@ func handleWS() {
 			return
 		}
 
-		fmt.Println(info)
+		setLatestSystemInfo(info)
 	}
 }
