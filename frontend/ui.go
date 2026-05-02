@@ -18,12 +18,12 @@ type model struct {
 	panels []*Panel
 	focus  int
 	wsAddr string
-	wsPort string
+	wsPort int
 }
 
 type refreshTickMsg time.Time
 
-func newModel(wsAddr, wsPort string) model {
+func newModel(wsAddr string, wsPort int) model {
 	return model{
 		panels: initPanels(),
 		focus:  0,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"tn-renzo/homelab-tui/shared/protocol"
@@ -33,8 +34,8 @@ func getLatestSystemInfo() SystemInfo {
 }
 
 // connect to ws and receive data
-func handleWS(addr string, port string) {
-	WSURL := "ws://" + addr + ":" + port + "/ws"
+func handleWS(addr string, port int) {
+	WSURL := "ws://" + addr + ":" + strconv.Itoa(port) + "/ws"
 	ctx := context.Background()
 	conn, _, err := websocket.Dial(ctx, WSURL, nil)
 	if err != nil {

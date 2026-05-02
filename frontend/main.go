@@ -1,36 +1,32 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
-	"strings"
+	"strconv"
 
 	tea "charm.land/bubbletea/v2"
 )
 
 func main() {
-	/* TODO: Add CLI parsing */
-	wsAddr := "127.0.0.1"
-	wsPort := "8080"
+	addr := flag.String("addr", "127.0.0.1", "<addr>")
+	port := flag.String("port", "8080", "<port>")
 
-	addrInput := ""
-	portInput := ""
+	flag.Parse()
 
-	fmt.Printf("WebSocket IP [%s]: ", wsAddr)
-	if _, err := fmt.Scanln(&addrInput); err == nil {
-		addrInput = strings.TrimSpace(addrInput)
-		if addrInput != "" {
-			wsAddr = addrInput
-		}
+	wsPort, err := strconv.Atoi(*port)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid port: %v\n", err)
+		return
 	}
 
-	fmt.Printf("WebSocket port [%s]: ", wsPort)
-	if _, err := fmt.Scanln(&portInput); err == nil {
-		portInput = strings.TrimSpace(portInput)
-		if portInput != "" {
-			wsPort = portInput
-		}
+	if wsPort > 65535 || wsPort < 1 {
+		fmt.Fprintf(os.Stdout, "Invalid Port: %d\n", wsPort)
+		return
 	}
+
+	wsAddr := *addr
 
 	p := tea.NewProgram(newModel(wsAddr, wsPort))
 	if _, err := p.Run(); err != nil {
