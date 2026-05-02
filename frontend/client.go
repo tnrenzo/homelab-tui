@@ -27,6 +27,7 @@ type SystemInfo struct {
 	CPU      int    `json:"cpu"`
 	CPUL     int    `json:"cpu_logical"`
 	MemTotal uint64 `json:"totalmem"`
+	MemUsed  uint64 `json:"usedmem"`
 	MemFree  uint64 `json:"freemem"`
 
 	Disks []DiskInfo `json:"disks"`
@@ -57,9 +58,10 @@ func getLatestSystemInfo() SystemInfo {
 }
 
 // connect to ws and receive data
-func handleWS() {
+func handleWS(addr string, port string) {
+	WSURL := "ws://" + addr + ":" + port + "/ws"
 	ctx := context.Background()
-	conn, _, err := websocket.Dial(ctx, "ws://localhost:8080/ws", nil)
+	conn, _, err := websocket.Dial(ctx, WSURL, nil)
 	if err != nil {
 		panic(err)
 	}

@@ -26,6 +26,7 @@ type SystemInfo struct {
 	CPU      int    `json:"cpu"`
 	CPUL     int    `json:"cpu_logical"`
 	MemTotal uint64 `json:"totalmem"`
+	MemUsed  uint64 `json:"usedmem"`
 	MemFree  uint64 `json:"freemem"`
 
 	Disks []DiskInfo `json:"disks"`
@@ -89,6 +90,7 @@ func (s *SystemInfo) fetchProc() error {
 	s.CPU = physicalc
 	s.CPUL = logicalc
 	s.MemTotal = m.Total
+	s.MemUsed = m.Used
 	s.MemFree = m.Free
 
 	return nil

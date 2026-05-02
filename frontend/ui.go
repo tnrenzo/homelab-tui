@@ -12,30 +12,61 @@ type Panel struct {
 	Title    string
 	Expanded bool
 	Content  []string
-	Selected int
 }
 
 type model struct {
-	width    int
-	height   int
-	panels   []*Panel
-	focus    int // which panel has focus
-	cursor   int // cursor within focused panel
-	lines    []string
-	selected map[int]struct{}
+	panels []*Panel
+	focus  int
 }
 
 type refreshTickMsg time.Time
 
 func newModel() model {
 	return model{
-		width:    120,
-		height:   30,
-		panels:   initPanels(),
-		focus:    0,
-		cursor:   0,
-		lines:    []string{},
-		selected: make(map[int]struct{}),
+		panels: initPanels(),
+		focus:  0,
+	}
+}
+
+func formatUptime(seconds uint64) string {
+	d := time.Duration(seconds) * time.Second
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	days := hours / 24
+	hours = hours % 24
+
+	if days > 0 {
+		return fmt.Sprintf("%dd %02dh %02dm", days, hours, minutes)
+	}
+
+	if hours > 0 {
+		return fmt.Sprintf("%dh %02dm", hours, minutes)
+	}
+
+	return fmt.Sprintf("%dm", minutes)
+}
+
+func systemPanelContent(info SystemInfo) []string {
+	if info.Hostname == "" {
+		return []string{"System: waiting for data..."}
+	}
+
+	return []string{
+		fmt.Sprintf("Host: %s", info.Hostname),
+		fmt.Sprintf("Arch: %s", info.Arch),
+		fmt.Sprintf("Kernel: %s", info.KVersion),
+		fmt.Sprintf("Uptime: %s", formatUptime(info.Uptime)),
+	}
+}
+
+func cpuPanelContent(info SystemInfo) []string {
+	if info.CPU == 0 && info.CPUL == 0 {
+		return []string{"CPU: waiting for data..."}
+	}
+
+	return []string{
+		fmt.Sprintf("Physical cores: %d", info.CPU),
+		fmt.Sprintf("Logical cores: %d", info.CPUL),
 	}
 }
 
@@ -45,7 +76,7 @@ func memoryPanelContent(info SystemInfo) []string {
 	}
 
 	max := int(info.MemTotal)
-	used := int(info.MemTotal - info.MemFree)
+	used := int(info.MemUsed)
 
 	return []string{
 		"Memory: " + renderBar(BarOptions{
@@ -58,19 +89,69 @@ func memoryPanelContent(info SystemInfo) []string {
 	}
 }
 
+func processPanelContent() []string {
+	return []string{"Process data is not available yet."}
+}
+
+func formatBytes(bytes uint64) string {
+	if bytes == 0 {
+		return "0 B"
+	}
+
+	units := []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"}
+	value := float64(bytes)
+	unitIndex := 0
+
+	for value >= 1024 && unitIndex < len(units)-1 {
+		value /= 1024
+		unitIndex++
+	}
+
+	if value >= 10 || unitIndex == 0 {
+		return fmt.Sprintf("%.0f %s", value, units[unitIndex])
+	}
+
+	return fmt.Sprintf("%.1f %s", value, units[unitIndex])
+}
+
+func truncateLabel(label string, max int) string {
+	if max <= 0 || len(label) <= max {
+		return label
+	}
+
+	if max <= 1 {
+		return label[:max]
+	}
+
+	return label[:max-1] + "…"
+}
+
 func diskPanelContent(info SystemInfo) []string {
 	if len(info.Disks) == 0 {
 		return []string{"Disk: waiting for data..."}
 	}
 
-	content := make([]string, 0, len(info.Disks))
+	maxMountWidth := len("Mount")
+	for _, disk := range info.Disks {
+		if len(disk.Mountpoint) > maxMountWidth {
+			maxMountWidth = len(disk.Mountpoint)
+		}
+	}
+	if maxMountWidth > 16 {
+		maxMountWidth = 16
+	}
+
+	header := fmt.Sprintf("%-*s  %8s  %8s  %s", maxMountWidth, "Mount", "Used", "Total", "Usage")
+	content := []string{header, strings.Repeat("-", len(header))}
+
 	for _, disk := range info.Disks {
 		total := int(disk.Total)
 		used := int(disk.Used)
-		line := fmt.Sprintf("%s %s", disk.Mountpoint, renderBar(BarOptions{
+		mount := truncateLabel(disk.Mountpoint, maxMountWidth)
+		line := fmt.Sprintf("%-*s  %8s  %8s  %s", maxMountWidth, mount, formatBytes(disk.Used), formatBytes(disk.Total), renderBar(BarOptions{
 			Max:       &total,
 			Current:   &used,
-			Width:     20,
+			Width:     12,
 			SymbolSet: "tty_up",
 			ShowValue: true,
 		}))
@@ -97,17 +178,11 @@ func setPanelContentByTitle(panels []*Panel, title string, content []string) {
 
 func refreshPanels(m model) model {
 	info := getLatestSystemInfo()
+	setPanelContentByTitle(m.panels, "System", systemPanelContent(info))
+	setPanelContentByTitle(m.panels, "CPU", cpuPanelContent(info))
 	setPanelContentByTitle(m.panels, "Memory", memoryPanelContent(info))
 	setPanelContentByTitle(m.panels, "Disk", diskPanelContent(info))
-
-	if m.focus < len(m.panels) {
-		maxCursor := len(m.panels[m.focus].Content) - 1
-		if maxCursor < 0 {
-			m.cursor = 0
-		} else if m.cursor > maxCursor {
-			m.cursor = maxCursor
-		}
-	}
+	setPanelContentByTitle(m.panels, "Processes", processPanelContent())
 
 	return m
 }
@@ -117,45 +192,35 @@ func initPanels() []*Panel {
 
 	return []*Panel{
 		{
+			Title:    "System",
+			Expanded: true,
+			Content:  systemPanelContent(info),
+		},
+		{
 			Title:    "CPU",
 			Expanded: true,
-			Content: []string{
-				"CPU 0: 25.4% [████░░░░░░░░ ]",
-				"CPU 1: 42.1% [████████░░░░ ]",
-				"CPU 2: 18.9% [██░░░░░░░░░░ ]",
-				"CPU 3: 35.7% [███████░░░░░░]",
-				"Average: 30.5%",
-			},
-			Selected: 0,
+			Content:  cpuPanelContent(info),
 		},
 		{
 			Title:    "Memory",
 			Expanded: true,
 			Content:  memoryPanelContent(info),
-			Selected: 0,
 		},
 		{
 			Title:    "Disk",
 			Expanded: true,
 			Content:  diskPanelContent(info),
-			Selected: 0,
 		},
 		{
 			Title:    "Processes",
 			Expanded: true,
-			Content: []string{
-				"firefox (PID: 1234) - 1.2 GB",
-				"go run (PID: 5678) - 234 MB",
-				"bash (PID: 9012) - 8 MB",
-				"system (PID: 1) - 4 MB",
-			},
-			Selected: 0,
+			Content:  processPanelContent(),
 		},
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	go handleWS()
+	go handleWS("192.168.1.11", "10001")
 	return refreshTickCmd()
 }
 
@@ -167,46 +232,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "tab":
-			// Switch focus between panels
 			m.focus = (m.focus + 1) % len(m.panels)
-			m.cursor = 0
 
 		case "shift+tab":
-			// Switch focus backwards
 			m.focus = (m.focus - 1 + len(m.panels)) % len(m.panels)
-			m.cursor = 0
 
 		case "enter":
-			// Toggle panel expansion
 			if m.focus < len(m.panels) {
 				m.panels[m.focus].Expanded = !m.panels[m.focus].Expanded
 			}
-
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-
-		case "down", "j":
-			if m.focus < len(m.panels) && m.cursor < len(m.panels[m.focus].Content)-1 {
-				m.cursor++
-			}
-
-		case "space":
-			// Toggle item selection within focused panel
-			if m.focus < len(m.panels) {
-				_, ok := m.selected[m.cursor]
-				if ok {
-					delete(m.selected, m.cursor)
-				} else {
-					m.selected[m.cursor] = struct{}{}
-				}
-			}
 		}
-
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
 
 	case refreshTickMsg:
 		m = refreshPanels(m)
@@ -217,50 +252,47 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() tea.View {
-	s := ""
-
-	// Header
+	var s strings.Builder
 	title := "System Overview"
-	s += fmt.Sprintf("%s\n\n", title)
+	s.WriteString(title + "\n")
+	s.WriteString(strings.Repeat("=", len(title)) + "\n\n")
 
-	// Render panels
 	for i, panel := range m.panels {
 		focused := i == m.focus
-		s += renderPanel(panel, m.cursor, focused, m.width) + "\n"
+		s.WriteString(renderPanel(panel, focused))
+		s.WriteString("\n\n")
 	}
 
-	// Footer with help text
-	helpText := "Tab: Navigate | Enter: Expand/Collapse | ↑↓/jk: Scroll | Space: Select | q: Quit"
-	s += "\n" + helpText
+	if s.Len() > 0 {
+		s.WriteString("\n")
+	}
+	s.WriteString("Tab/Shift+Tab: Focus | Enter: Expand/Collapse | q: Quit")
 
-	return tea.NewView(s)
+	return tea.NewView(s.String())
 }
 
-func renderPanel(p *Panel, cursor int, isFocused bool, width int) string {
-	indicator := "v"
-	if !p.Expanded {
+func renderPanel(p *Panel, isFocused bool) string {
+	indicator := " "
+	if isFocused {
 		indicator = ">"
 	}
 
-	// Header line
-	titleLine := fmt.Sprintf("%s %s", indicator, p.Title)
-	if isFocused {
-		titleLine = "-> " + titleLine
-	}
-
+	state := "open"
 	if !p.Expanded {
-		return titleLine
+		state = "closed"
 	}
 
 	var b strings.Builder
-	b.WriteString(titleLine + "\n")
-	for i, line := range p.Content {
-		prefix := "  "
-		if isFocused && i == cursor {
-			prefix = "-> "
-		}
-		b.WriteString(prefix + line + "\n")
+	b.WriteString(fmt.Sprintf("%s %s [%s]\n", indicator, p.Title, state))
+	if !p.Expanded {
+		return strings.TrimRight(b.String(), "\n")
 	}
 
-	return b.String()
+	b.WriteString("  " + strings.Repeat("─", 48) + "\n")
+
+	for _, line := range p.Content {
+		b.WriteString("  " + line + "\n")
+	}
+
+	return strings.TrimRight(b.String(), "\n")
 }
