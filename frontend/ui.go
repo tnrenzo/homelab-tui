@@ -17,14 +17,18 @@ type Panel struct {
 type model struct {
 	panels []*Panel
 	focus  int
+	wsAddr string
+	wsPort string
 }
 
 type refreshTickMsg time.Time
 
-func newModel() model {
+func newModel(wsAddr, wsPort string) model {
 	return model{
 		panels: initPanels(),
 		focus:  0,
+		wsAddr: wsAddr,
+		wsPort: wsPort,
 	}
 }
 
@@ -220,7 +224,7 @@ func initPanels() []*Panel {
 }
 
 func (m model) Init() tea.Cmd {
-	go handleWS("192.168.1.11", "10001") // test values
+	go handleWS(m.wsAddr, m.wsPort)
 	return refreshTickCmd()
 }
 

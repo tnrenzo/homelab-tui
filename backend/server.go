@@ -8,13 +8,10 @@ import (
 	"os"
 	"time"
 
+	"tn-renzo/homelab-tui/shared/protocol"
+
 	"github.com/coder/websocket"
 )
-
-type Payload struct {
-	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload"`
-}
 
 // creates the websocket and sends system data
 func handleWS(w http.ResponseWriter, r *http.Request) {
@@ -31,8 +28,8 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
-		info := SystemInfo{}
-		if err := info.fetchProc(); err != nil {
+		info, err := fetchSystemInfo()
+		if err != nil {
 			fmt.Fprint(os.Stderr, "Error fetching Info", err)
 			return
 		}
@@ -43,7 +40,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		msg := Payload{
+		msg := protocol.Message{
 			Type:    "system_info",
 			Payload: json.RawMessage(data),
 		}
