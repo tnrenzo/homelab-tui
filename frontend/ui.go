@@ -74,6 +74,58 @@ func cpuPanelContent(info SystemInfo) []string {
 	}
 }
 
+func cpuCoresPanelContent(info SystemInfo) []string {
+	n := len(info.CoreUsage)
+
+	if n == 0 {
+		return []string{"CPU Cores: waiting for data..."}
+	}
+
+	cols := 2
+	if n > 12 {
+		cols = 4
+	} else if n > 6 {
+		cols = 3
+	}
+	rows := (n + cols - 1) / cols
+
+	// per-column formatting
+	labelWidth := 6
+	barWidth := 8
+	colWidth := labelWidth + 1 + barWidth + 1 + 4
+
+	lines := make([]string, 0, rows)
+	for r := 0; r < rows; r++ {
+		var parts []string
+		for c := 0; c < cols; c++ {
+			idx := r + c*rows
+			if idx >= n {
+				continue
+			}
+			perc := int(info.CoreUsage[idx] + 0.5)
+			bar := renderBar(BarOptions{
+				Percentage: &perc,
+				Width:      barWidth,
+				SymbolSet:  "tty_up",
+				ShowValue:  false,
+			})
+			label := fmt.Sprintf("C%02d", idx)
+			pct := fmt.Sprintf("%3d%%", perc)
+			parts = append(parts, fmt.Sprintf("%-*s %s %s", labelWidth, label, bar, pct))
+		}
+		lines = append(lines, strings.Join(parts, "  "))
+	}
+
+	header := fmt.Sprintf("Cores (%d):", n)
+	sepLen := cols*colWidth + (cols-1)*2
+	if sepLen < len(header) {
+		sepLen = len(header)
+	}
+	out := []string{header, strings.Repeat("-", sepLen)}
+	out = append(out, lines...)
+	return out
+}
+
 func memoryPanelContent(info SystemInfo) []string {
 	if info.MemTotal == 0 {
 		return []string{"Memory: waiting for data..."}
@@ -184,6 +236,7 @@ func refreshPanels(m model) model {
 	info := getLatestSystemInfo()
 	setPanelContentByTitle(m.panels, "System", systemPanelContent(info))
 	setPanelContentByTitle(m.panels, "CPU", cpuPanelContent(info))
+	setPanelContentByTitle(m.panels, "CPU Cores", cpuCoresPanelContent(info))
 	setPanelContentByTitle(m.panels, "Memory", memoryPanelContent(info))
 	setPanelContentByTitle(m.panels, "Disk", diskPanelContent(info))
 	setPanelContentByTitle(m.panels, "Processes", processPanelContent())
@@ -204,6 +257,11 @@ func initPanels() []*Panel {
 			Title:    "CPU",
 			Expanded: true,
 			Content:  cpuPanelContent(info),
+		},
+		{
+			Title:    "CPU Cores",
+			Expanded: false,
+			Content:  cpuCoresPanelContent(info),
 		},
 		{
 			Title:    "Memory",
