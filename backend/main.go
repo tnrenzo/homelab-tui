@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	host := flag.String("host", "127.0.0.1", "<host>")
+	addr := flag.String("addr", "127.0.0.1", "<host>")
 	port := flag.String("port", "8080", "<port>")
 
 	flag.Parse()
@@ -25,7 +25,7 @@ func main() {
 		return
 	}
 
-	listenAddr := *host + ":" + strconv.Itoa(wsPort)
+	listenAddr := *addr + ":" + strconv.Itoa(wsPort)
 	fmt.Printf("WS on %s\n", listenAddr)
 
 	http.HandleFunc("/ws", handleWS)
