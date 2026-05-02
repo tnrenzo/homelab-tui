@@ -220,7 +220,7 @@ func initPanels() []*Panel {
 }
 
 func (m model) Init() tea.Cmd {
-	go handleWS("192.168.1.11", "10001")
+	go handleWS("192.168.1.11", "10001") // test values
 	return refreshTickCmd()
 }
 

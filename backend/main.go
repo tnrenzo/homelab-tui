@@ -7,9 +7,9 @@ import (
 )
 
 func main() {
-	fmt.Println("WS on 127.0.0.1:8080")
+	fmt.Println("WS on 0.0.0.0:10001")
 	http.HandleFunc("/ws", handleWS)
-	err := http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(":10001", nil)
 	if err != nil {
 		fmt.Fprint(os.Stderr, "Error creating websocket", err)
 	}
