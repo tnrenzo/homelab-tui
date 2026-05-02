@@ -6,44 +6,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-)
-
-var (
-	// Color palette
-	accentColor     = lipgloss.Color("#62a480")
-	borderColor     = lipgloss.Color("#62a480")
-	headerBg        = lipgloss.Color("#1e1e1e")
-	selectedColor   = lipgloss.Color("#ffffff")
-	unselectedColor = lipgloss.Color("#808080")
-
-	// Styles
-	headerStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(selectedColor).
-			Background(lipgloss.Color("#0a0a0a")).
-			Padding(1, 2).
-			MarginBottom(1).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(borderColor)
-
-	panelStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(borderColor).
-			Padding(1, 2).
-			MarginBottom(1)
-
-	panelTitleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(accentColor)
-
-	expandedIndicatorStyle = lipgloss.NewStyle().
-				Foreground(accentColor)
-
-	helpStyle = lipgloss.NewStyle().
-			Foreground(unselectedColor).
-			Align(lipgloss.Center).
-			MarginTop(1)
 )
 
 type Panel struct {
@@ -258,63 +220,47 @@ func (m model) View() tea.View {
 	s := ""
 
 	// Header
-	title := "󰡴 System Overview"
-	s += headerStyle.Render(title) + "\n"
+	title := "System Overview"
+	s += fmt.Sprintf("%s\n\n", title)
 
-	// Render panels in a grid layout
+	// Render panels
 	for i, panel := range m.panels {
-		if i == m.focus {
-			s += renderPanel(panel, m.cursor, m.focus == i, m.width) + "\n"
-		} else {
-			s += renderPanel(panel, m.cursor, false, m.width) + "\n"
-		}
+		focused := i == m.focus
+		s += renderPanel(panel, m.cursor, focused, m.width) + "\n"
 	}
 
 	// Footer with help text
 	helpText := "Tab: Navigate | Enter: Expand/Collapse | ↑↓/jk: Scroll | Space: Select | q: Quit"
-	s += helpStyle.Render(helpText)
+	s += "\n" + helpText
 
 	return tea.NewView(s)
 }
 
 func renderPanel(p *Panel, cursor int, isFocused bool, width int) string {
-	indicator := "▼"
+	indicator := "v"
 	if !p.Expanded {
-		indicator = "▶"
+		indicator = ">"
 	}
 
-	// Panel header with expand/collapse indicator
+	// Header line
 	titleLine := fmt.Sprintf("%s %s", indicator, p.Title)
 	if isFocused {
-		titleLine = "▸ " + titleLine
+		titleLine = "-> " + titleLine
 	}
-	titleRendered := panelTitleStyle.Render(titleLine)
-
-	var borderFgColor string
-	if isFocused {
-		borderFgColor = "#ffffff"
-	} else {
-		borderFgColor = "#62a480"
-	}
-
-	style := panelStyle.Copy().BorderForeground(lipgloss.Color(borderFgColor))
 
 	if !p.Expanded {
-		return style.Render(titleRendered)
+		return titleLine
 	}
 
-	// Render content
-	var content strings.Builder
-	content.WriteString(titleRendered + "\n")
-
+	var b strings.Builder
+	b.WriteString(titleLine + "\n")
 	for i, line := range p.Content {
 		prefix := "  "
 		if isFocused && i == cursor {
-			prefix = "→ "
+			prefix = "-> "
 		}
-
-		content.WriteString(prefix + line + "\n")
+		b.WriteString(prefix + line + "\n")
 	}
 
-	return style.Render(content.String())
+	return b.String()
 }
