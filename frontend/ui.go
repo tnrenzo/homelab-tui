@@ -2,11 +2,18 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
+
+type Tab struct {
+	Title  string
+	Panels []*Panel
+}
 
 type Panel struct {
 	Title    string
@@ -15,20 +22,24 @@ type Panel struct {
 }
 
 type model struct {
-	panels []*Panel
-	focus  int
-	wsAddr string
-	wsPort int
+	tabs      []Tab
+	activeTab int
+	focus     int
+	wsAddr    string
+	wsPort    int
+	width     int
+	height    int
 }
 
 type refreshTickMsg time.Time
 
 func newModel(wsAddr string, wsPort int) model {
 	return model{
-		panels: initPanels(),
-		focus:  0,
-		wsAddr: wsAddr,
-		wsPort: wsPort,
+		tabs:      initTabs(),
+		activeTab: 0,
+		focus:     0,
+		wsAddr:    wsAddr,
+		wsPort:    wsPort,
 	}
 }
 
@@ -131,12 +142,12 @@ func memoryPanelContent(info SystemInfo) []string {
 		return []string{"Memory: waiting for data..."}
 	}
 
-	max := int(info.MemTotal)
+	m := int(info.MemTotal)
 	used := int(info.MemUsed)
 
 	return []string{
 		"Memory: " + renderBar(BarOptions{
-			Max:       &max,
+			Max:       &m,
 			Current:   &used,
 			Width:     20,
 			SymbolSet: "braille_up",
@@ -217,6 +228,22 @@ func diskPanelContent(info SystemInfo) []string {
 	return content
 }
 
+func networkPanelContent(info SystemInfo) []string {
+	if len(info.Network) == 0 {
+		return []string{"Network: waiting for data..."}
+	}
+
+	header := fmt.Sprintf("%-10s  %12s  %12s", "Interface", "Download", "Upload")
+	content := []string{header, strings.Repeat("-", len(header))}
+
+	for _, net := range info.Network {
+		line := fmt.Sprintf("%-10s  %12s  %12s", net.Interface, formatBytes(net.RxBytes), formatBytes(net.TxBytes))
+		content = append(content, line)
+	}
+
+	return content
+}
+
 func refreshTickCmd() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
 		return refreshTickMsg(t)
@@ -234,20 +261,23 @@ func setPanelContentByTitle(panels []*Panel, title string, content []string) {
 
 func refreshPanels(m model) model {
 	info := getLatestSystemInfo()
-	setPanelContentByTitle(m.panels, "System", systemPanelContent(info))
-	setPanelContentByTitle(m.panels, "CPU", cpuPanelContent(info))
-	setPanelContentByTitle(m.panels, "CPU Cores", cpuCoresPanelContent(info))
-	setPanelContentByTitle(m.panels, "Memory", memoryPanelContent(info))
-	setPanelContentByTitle(m.panels, "Disk", diskPanelContent(info))
-	setPanelContentByTitle(m.panels, "Processes", processPanelContent())
+	for t := range m.tabs {
+		setPanelContentByTitle(m.tabs[t].Panels, "System", systemPanelContent(info))
+		setPanelContentByTitle(m.tabs[t].Panels, "CPU", cpuPanelContent(info))
+		setPanelContentByTitle(m.tabs[t].Panels, "CPU Cores", cpuCoresPanelContent(info))
+		setPanelContentByTitle(m.tabs[t].Panels, "Memory", memoryPanelContent(info))
+		setPanelContentByTitle(m.tabs[t].Panels, "Disk", diskPanelContent(info))
+		setPanelContentByTitle(m.tabs[t].Panels, "Processes", processPanelContent())
+		setPanelContentByTitle(m.tabs[t].Panels, "Networking", networkPanelContent(info))
+	}
 
 	return m
 }
 
-func initPanels() []*Panel {
+func initTabs() []Tab {
 	info := getLatestSystemInfo()
 
-	return []*Panel{
+	overviewPanels := []*Panel{
 		{
 			Title:    "System",
 			Expanded: true,
@@ -259,11 +289,6 @@ func initPanels() []*Panel {
 			Content:  cpuPanelContent(info),
 		},
 		{
-			Title:    "CPU Cores",
-			Expanded: false,
-			Content:  cpuCoresPanelContent(info),
-		},
-		{
 			Title:    "Memory",
 			Expanded: true,
 			Content:  memoryPanelContent(info),
@@ -273,11 +298,33 @@ func initPanels() []*Panel {
 			Expanded: true,
 			Content:  diskPanelContent(info),
 		},
+	}
+
+	resourcePanels := []*Panel{
+		{
+			Title:    "CPU Cores",
+			Expanded: true,
+			Content:  cpuCoresPanelContent(info),
+		},
 		{
 			Title:    "Processes",
 			Expanded: true,
 			Content:  processPanelContent(),
 		},
+	}
+
+	networkPanel := []*Panel{
+		{
+			Title:    "Networking",
+			Expanded: true,
+			Content:  networkPanelContent(info),
+		},
+	}
+
+	return []Tab{
+		{Title: "Overview", Panels: overviewPanels},
+		{Title: "Resources", Panels: resourcePanels},
+		{Title: "Networking", Panels: networkPanel},
 	}
 }
 
@@ -293,17 +340,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 
+		case "1", "2", "3":
+			idx, _ := strconv.Atoi(msg.String())
+			if idx <= len(m.tabs) {
+				m.activeTab = idx - 1
+				m.focus = 0
+			}
+
 		case "tab":
-			m.focus = (m.focus + 1) % len(m.panels)
+			m.focus = (m.focus + 1) % len(m.tabs[m.activeTab].Panels)
 
 		case "shift+tab":
-			m.focus = (m.focus - 1 + len(m.panels)) % len(m.panels)
+			m.focus = (m.focus - 1 + len(m.tabs[m.activeTab].Panels)) % len(m.tabs[m.activeTab].Panels)
 
 		case "enter":
-			if m.focus < len(m.panels) {
-				m.panels[m.focus].Expanded = !m.panels[m.focus].Expanded
+			panels := m.tabs[m.activeTab].Panels
+			if m.focus < len(panels) {
+				panels[m.focus].Expanded = !panels[m.focus].Expanded
 			}
 		}
+
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 
 	case refreshTickMsg:
 		m = refreshPanels(m)
@@ -314,46 +373,75 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() tea.View {
-	var s strings.Builder
-	title := "System Overview"
-	s.WriteString(title + "\n")
-	s.WriteString(strings.Repeat("=", len(title)) + "\n\n")
+	// 1. Render Tabs
+	var tabStrings []string
+	for i, t := range m.tabs {
+		style := lipgloss.NewStyle().Padding(0, 1)
+		if i == m.activeTab {
+			style = style.Foreground(lipgloss.Color("205")).Bold(true).Underline(true)
+		}
+		tabStrings = append(tabStrings, style.Render(fmt.Sprintf("[%d] %s", i+1, t.Title)))
+	}
+	header := lipgloss.JoinHorizontal(lipgloss.Top, tabStrings...) + "\n\n"
 
-	for i, panel := range m.panels {
-		focused := i == m.focus
-		s.WriteString(renderPanel(panel, focused))
-		s.WriteString("\n\n")
+	// 2. Render Panels in a Grid (2 columns)
+	activePanels := m.tabs[m.activeTab].Panels
+	var rows []string
+	var currentRow []string
+
+	// Calculate panel width (rough estimate for 2 columns)
+	panelWidth := (m.width / 2) - 4
+	if panelWidth < 40 {
+		panelWidth = 40
 	}
 
-	if s.Len() > 0 {
-		s.WriteString("\n")
-	}
-	s.WriteString("Tab/Shift+Tab: Focus | Enter: Expand/Collapse | q: Quit")
+	for i, p := range activePanels {
+		isFocused := i == m.focus
 
-	return tea.NewView(s.String())
+		// Style the panel box
+		panelStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("240")).
+			Width(panelWidth).
+			Padding(0, 1)
+
+		if isFocused {
+			panelStyle = panelStyle.BorderForeground(lipgloss.Color("205"))
+		}
+
+		renderedPanel := panelStyle.Render(renderPanel(p))
+		currentRow = append(currentRow, renderedPanel)
+
+		// Every 2 panels, start a new row
+		if len(currentRow) == 2 || i == len(activePanels)-1 {
+			rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, currentRow...))
+			currentRow = []string{}
+		}
+	}
+
+	body := lipgloss.JoinVertical(lipgloss.Left, rows...)
+
+	footer := "\n\n1-2: Switch Tabs | Tab: Focus | Enter: Toggle | q: Quit"
+
+	return tea.NewView(header + body + footer)
 }
 
-func renderPanel(p *Panel, isFocused bool) string {
-	indicator := " "
-	if isFocused {
-		indicator = ">"
-	}
-
+func renderPanel(p *Panel) string {
 	state := "open"
 	if !p.Expanded {
 		state = "closed"
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("%s %s [%s]\n", indicator, p.Title, state))
+	b.WriteString(fmt.Sprintf("%s [%s]\n", p.Title, state))
 	if !p.Expanded {
 		return strings.TrimRight(b.String(), "\n")
 	}
 
-	b.WriteString("  " + strings.Repeat("─", 48) + "\n")
+	b.WriteString(strings.Repeat("─", 40) + "\n")
 
 	for _, line := range p.Content {
-		b.WriteString("  " + line + "\n")
+		b.WriteString(line + "\n")
 	}
 
 	return strings.TrimRight(b.String(), "\n")

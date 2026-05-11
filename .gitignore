@@ -3,6 +3,8 @@
 .vscode/
 .idea/
 
+build/
+
 .env
 
 *.log

@@ -1,6 +1,8 @@
 package protocol
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 type Message struct {
 	Type    string          `json:"type"`
@@ -15,6 +17,24 @@ type DiskInfo struct {
 	UsedPct    float64 `json:"used_pct"`
 }
 
+type ProcessInfo struct {
+	Name string `json:"process"`
+	User string `json:"user"`
+	Pid  int    `json:"pid"`
+}
+
+type NetworkInfo struct {
+	Interface string `json:"interface"`
+	RxBytes   uint64 `json:"rx_bytes"`
+	TxBytes   uint64 `json:"tx_bytes"`
+}
+
+type LoadInfo struct {
+	Load1  float64 `json:"load1"`
+	Load5  float64 `json:"load5"`
+	Load15 float64 `json:"load15"`
+}
+
 type SystemInfo struct {
 	// host
 	Hostname string `json:"hostname"`
@@ -27,10 +47,16 @@ type SystemInfo struct {
 	CPUL      int       `json:"cpu_logical"`
 	CoreUsage []float64 `json:"core_usage"`
 
+	Load []LoadInfo `json:"load"`
+
 	// Memory
 	MemTotal uint64 `json:"totalmem"`
 	MemUsed  uint64 `json:"usedmem"`
 	MemFree  uint64 `json:"freemem"`
 
 	Disks []DiskInfo `json:"disks"`
+
+	Processes []ProcessInfo `json:"procs"`
+
+	Network []NetworkInfo `json:"network"`
 }
